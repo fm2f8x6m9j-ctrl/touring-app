@@ -1,11 +1,22 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from database import engine, SessionLocal
-from models import Base, Category,Routes, Spots
+from models import Base, Category, Routes, Spots
 from schemas import CategoryCreate, CategoryResponse, RouteCreate, RouteResponse, SpotCreate, SpotResponse
 from uuid import UUID
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 Base.metadata.create_all(bind=engine)
 

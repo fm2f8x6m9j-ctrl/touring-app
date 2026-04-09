@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>ツーリングアプリ</title>
+  <style>
+    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+    h1 { border-bottom: 3px solid #333; padding-bottom: 8px; }
+    h2 { margin-top: 32px; color: #555; }
+    .form-group { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+    .form-group input, .form-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+    .form-group button { padding: 8px 16px; background: #2563eb; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    .form-group button:hover { background: #1d4ed8; }
+    .card { background: white; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .card-header { font-weight: bold; font-size: 16px; }
+    .card-detail { color: #666; font-size: 14px; margin-top: 4px; }
+    .card-memo { color: #888; font-size: 13px; margin-top: 4px; }
+    .card-actions { margin-top: 8px; display: flex; gap: 8px; }
+    .btn-edit { padding: 4px 12px; background: #f59e0b; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .btn-delete { padding: 4px 12px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .btn-edit:hover { background: #d97706; }
+    .btn-delete:hover { background: #dc2626; }
+    .empty { color: #aaa; font-style: italic; }
+  </style>
+</head>
+<body>
+  <h1>ツーリングアプリ</h1>
+
+  <h2>カテゴリ管理</h2>
+  <div class="form-group">
+    <input id="category-name" placeholder="カテゴリ名">
+    <button onclick="addCategory()">登録</button>
+  </div>
+  <div id="category-list"></div>
+
+  <h2>ルート管理</h2>
+  <div class="form-group">
+    <input id="route-name" placeholder="ルート名">
+    <input id="route-start" placeholder="出発地">
+    <input id="route-end" placeholder="到着地">
+    <input id="route-date" type="date">
+    <input id="route-memo" placeholder="メモ">
+    <button onclick="addRoute()">登録</button>
+  </div>
+  <div id="route-list"></div>
+
+  <h2>スポット管理</h2>
+  <div class="form-group">
+    <select id="spot-route"></select>
+    <select id="spot-category"></select>
+    <input id="spot-name" placeholder="スポット名">
+    <input id="spot-memo" placeholder="メモ">
+    <button onclick="addSpot()">登録</button>
+  </div>
+  <div id="spot-list"></div>
+
+  <script>
+    const API = "http://localhost:8000";
+
+    async function loadCategories() {
+      const res = await fetch(API + "/categories");
+      const data = await res.json();
+      const div = document.getElementById("category-list");
+      div.innerHTML = "";
+      if (data.length === 0) {
+        div.innerHTML = '<p class="empty">カテゴリがありません</p>';
+        return;
+      }
+      data.forEach(c => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = '<div class="card-header">' + c.name + '</div><div class="card-actions"></div>';
+        const actions = card.querySelector(".card-actions");
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn-edit";
+        editBtn.textContent = "編集";
+        editBtn.onclick = () => {
+          const newName = prompt("新しい名前:", c.name);
+          if (newName) {
+            fetch(API + "/categories/" + c.id, {
+              method: "PUT",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({name: newName})
+            }).then(() => { loadCategories(); loadSelects(); });
+          }
+        };
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn-delete";
+        delBtn.textContent = "削除";
+        delBtn.onclick = async () => {
+          if (confirm(c.name + " を削除しますか？")) {
+            await fetch(API + "/categories/" + c.id, {method: "DELETE"});
+            loadCategories();
+            loadSelects();
+          }
+        };
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        div.appendChild(card);
+      });
+    }
+
+    async function addCategory() {
+      const input = document.getElementById("category-name");
+      if (!input.value) return;
+      await fetch(API + "/categories", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({name: input.value})
+      });
+      input.value = "";
+      loadCategories();
+      loadSelects();
+    }
+
+    async function loadRoutes() {
+      const res = await fetch(API + "/routes");
+      const data = await res.json();
+      const div = document.getElementById("route-list");
+      div.innerHTML = "";
+      if (data.length === 0) {
+        div.innerHTML = '<p class="empty">ルートがありません</p>';
+        return;
+      }
+      data.forEach(r => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML =
+          '<div class="card-header">' + r.name + '</div>' +
+          '<div class="card-detail">' + r.start_point + ' → ' + r.end_point + '　' + (r.date || "") + '</div>' +
+          '<div class="card-memo">メモ: ' + (r.memo || "なし") + '</div>' +
+          '<div class="card-actions"></div>';
+        const actions = card.querySelector(".card-actions");
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn-edit";
+        editBtn.textContent = "編集";
+        editBtn.onclick = () => {
+          const name = prompt("ルート名:", r.name);
+          const start = prompt("出発地:", r.start_point);
+          const end = prompt("到着地:", r.end_point);
+          const date = prompt("日付 (YYYY-MM-DD):", r.date);
+          const memo = prompt("メモ:", r.memo);
+          if (name) {
+            fetch(API + "/routes/" + r.id, {
+              method: "PUT",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({name, start_point: start, end_point: end, date: date || null, memo: memo || null})
+            }).then(() => { loadRoutes(); loadSelects(); });
+          }
+        };
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn-delete";
+        delBtn.textContent = "削除";
+        delBtn.onclick = async () => {
+          if (confirm(r.name + " を削除しますか？")) {
+            await fetch(API + "/routes/" + r.id, {method: "DELETE"});
+            loadRoutes();
+            loadSelects();
+          }
+        };
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        div.appendChild(card);
+      });
+    }
+
+    async function addRoute() {
+      const name = document.getElementById("route-name");
+      const start = document.getElementById("route-start");
+      const end = document.getElementById("route-end");
+      const date = document.getElementById("route-date");
+      const memo = document.getElementById("route-memo");
+      if (!name.value) return;
+      await fetch(API + "/routes", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          name: name.value, start_point: start.value,
+          end_point: end.value, date: date.value || null, memo: memo.value || null
+        })
+      });
+      name.value = ""; start.value = ""; end.value = ""; date.value = ""; memo.value = "";
+      loadRoutes();
+      loadSelects();
+    }
+
+    async function loadSpots() {
+      const res = await fetch(API + "/spots");
+      const data = await res.json();
+      const div = document.getElementById("spot-list");
+      div.innerHTML = "";
+      if (data.length === 0) {
+        div.innerHTML = '<p class="empty">スポットがありません</p>';
+        return;
+      }
+      data.forEach(s => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML =
+          '<div class="card-header">' + s.name + '</div>' +
+          '<div class="card-memo">メモ: ' + (s.memo || "なし") + '</div>' +
+          '<div class="card-actions"></div>';
+        const actions = card.querySelector(".card-actions");
+        const editBtn = document.createElement("button");
+        editBtn.className = "btn-edit";
+        editBtn.textContent = "編集";
+        editBtn.onclick = () => {
+          const name = prompt("スポット名:", s.name);
+          const memo = prompt("メモ:", s.memo);
+          if (name) {
+            fetch(API + "/spots/" + s.id, {
+              method: "PUT",
+              headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({route_id: s.route_id, category_id: s.category_id, name, memo: memo || null})
+            }).then(() => loadSpots());
+          }
+        };
+        const delBtn = document.createElement("button");
+        delBtn.className = "btn-delete";
+        delBtn.textContent = "削除";
+        delBtn.onclick = async () => {
+          if (confirm(s.name + " を削除しますか？")) {
+            await fetch(API + "/spots/" + s.id, {method: "DELETE"});
+            loadSpots();
+          }
+        };
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        div.appendChild(card);
+      });
+    }
+
+    async function addSpot() {
+      const route = document.getElementById("spot-route");
+      const category = document.getElementById("spot-category");
+      const name = document.getElementById("spot-name");
+      const memo = document.getElementById("spot-memo");
+      if (!name.value || !route.value || !category.value) return;
+      await fetch(API + "/spots", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          route_id: route.value, category_id: category.value,
+          name: name.value, memo: memo.value || null
+        })
+      });
+      name.value = ""; memo.value = "";
+      loadSpots();
+    }
+
+    async function loadSelects() {
+      const routes = await (await fetch(API + "/routes")).json();
+      const categories = await (await fetch(API + "/categories")).json();
+      const routeSelect = document.getElementById("spot-route");
+      const catSelect = document.getElementById("spot-category");
+      routeSelect.innerHTML = '<option value="">ルートを選択</option>';
+      catSelect.innerHTML = '<option value="">カテゴリを選択</option>';
+      routes.forEach(r => {
+        routeSelect.innerHTML += '<option value="' + r.id + '">' + r.name + '</option>';
+      });
+      categories.forEach(c => {
+        catSelect.innerHTML += '<option value="' + c.id + '">' + c.name + '</option>';
+      });
+    }
+
+    loadCategories();
+    loadRoutes();
+    loadSpots();
+    loadSelects();
+  </script>
+</body>
+</html>

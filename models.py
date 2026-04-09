@@ -19,12 +19,12 @@ class Routes(Base):
     memo = Column(Text)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
-    
+
 class Spots(Base):
     __tablename__ = "spots"
     id = Column(UUID(as_uuid=True),primary_key=True, default=uuid.uuid4)
     route_id = Column(UUID(as_uuid=True), ForeignKey("routes.id"))
-    classategorytegory_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"))
+    category_id = Column(UUID(as_uuid=True), ForeignKey("categories.id"))
     name = Column(String(100),nullable=False)
     memo = Column(Text)
     created_at = Column(DateTime)
